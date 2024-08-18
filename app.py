@@ -8,6 +8,9 @@ from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.cluster import DBSCAN
 
+seed = 42
+np.random.seed(seed)
+torch.manual_seed(seed)
 # Load the AraBERT model
 @st.cache_resource
 def load_model():
@@ -67,7 +70,7 @@ def main():
                         # Perform clustering
                         threshold = 0.9
                         eps = 1 - threshold
-                        dbscan = DBSCAN(eps=eps, min_samples=7, metric='precomputed')
+                        dbscan = DBSCAN(eps=eps, min_samples=8, metric='precomputed')
                         clusters = dbscan.fit_predict(distance_matrix)
 
                         # Add clusters to the DataFrame
