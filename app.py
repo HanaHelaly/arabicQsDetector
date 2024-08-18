@@ -27,7 +27,7 @@ def main():
     st.text("")
     st.markdown("###### Upload CSV File and Get DataFrame with Repeated Questions")
 
-    file = st.file_uploader("", type="csv")
+    file = st.file_uploader("Upload here", type="csv")
 
     if file:
         # Detect the encoding of the file
