@@ -1,4 +1,3 @@
-import torch
 import pandas as pd
 import numpy as np
 import streamlit as st
@@ -10,12 +9,12 @@ from sklearn.cluster import DBSCAN
 import nltk
 from nltk.corpus import stopwords
 import re
+import torch
 nltk.download('stopwords')
 
 seed = 42
 np.random.seed(seed)
 torch.manual_seed(seed)
-
 
 def preprocess_text(text):
     # Load Arabic stopwords
@@ -38,9 +37,6 @@ def preprocess_text(text):
 
     return cleaned_text
 
-
-
-
 # Load the AraBERT model
 @st.cache_resource
 def load_model():
@@ -54,24 +50,21 @@ def encode_sentences(model, sentences):
 
 def main():
     st.set_page_config(page_title="Repeated Questions")
-    # Load model
-
 
     st.title("🔎 Arabic Repeated Qs Detector")
     st.text("")
     st.text("")
-    st.markdown("###### Upload CSV File and Get DataFrame with Repeated Questions")
+    st.markdown("###### Upload Excel File and Get DataFrame with Repeated Questions")
+
     model = load_model()
-    file = st.file_uploader("Upload here", type="csv")
+    file = st.file_uploader("Upload here", type=["csv", "xlsx"])
 
     if file:
-        # Detect the encoding of the file
-        file_content = file.read()
-        result = chardet.detect(file_content)
-        encoding = result['encoding'] if result['encoding'] else 'utf-8'
-        file_content = io.StringIO(file_content.decode(encoding))
+        if file.name.endswith('.csv'):
+            df = pd.read_csv(file)
+        else:
+            df = pd.read_excel(file)
 
-        df = pd.read_csv(file_content)
         df.columns = df.columns.str.strip()
         df_copy = df.copy()
 
@@ -118,12 +111,17 @@ def main():
                         df_sorted = df.sort_values(by='category')
 
                         st.dataframe(df_sorted)
-                        csv_data = df_sorted.to_csv(index=False, encoding=encoding)
+
+                        # Save the sorted dataframe to an Excel file in memory
+                        output = io.BytesIO()
+                        df_sorted.to_excel(output, index=False, engine='xlsxwriter')
+                        output.seek(0)
+
                         st.download_button(
-                            label="Download",
-                            data=csv_data.encode(encoding),
-                            file_name="results.csv",
-                            mime="text/csv",
+                            label="Download Results",
+                            data=output,
+                            file_name="data.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         )
 
                         st.session_state.button_clicked = False
