@@ -7,10 +7,40 @@ import io
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.cluster import DBSCAN
+import nltk
+from nltk.corpus import stopwords
+import re
+nltk.download('stopwords')
 
 seed = 42
 np.random.seed(seed)
 torch.manual_seed(seed)
+
+
+def preprocess_text(text):
+    # Load Arabic stopwords
+    stop_words = set(stopwords.words('arabic'))
+
+    # Remove numbers
+    text = re.sub(r'\d+', '', text)
+
+    # Remove punctuation
+    text = re.sub(r'[^\w\s]', '', text)
+
+    # Tokenize the text
+    tokens = text.split()
+
+    # Remove stopwords
+    tokens = [word for word in tokens if word not in stop_words]
+
+    # Rejoin tokens into a single string
+    cleaned_text = ' '.join(tokens)
+
+    return cleaned_text
+
+
+
+
 # Load the AraBERT model
 @st.cache_resource
 def load_model():
@@ -24,12 +54,14 @@ def encode_sentences(model, sentences):
 
 def main():
     st.set_page_config(page_title="Repeated Questions")
+    # Load model
+
 
     st.title("🔎 Arabic Repeated Qs Detector")
     st.text("")
     st.text("")
     st.markdown("###### Upload CSV File and Get DataFrame with Repeated Questions")
-
+    model = load_model()
     file = st.file_uploader("Upload here", type="csv")
 
     if file:
@@ -41,8 +73,10 @@ def main():
 
         df = pd.read_csv(file_content)
         df.columns = df.columns.str.strip()
+        df_copy = df.copy()
 
-
+        # Preprocess text and add cleaned column to the copy
+        df_copy['cleaned_question'] = df_copy['السؤال'].apply(preprocess_text)
 
         if "button_clicked" not in st.session_state:
             st.session_state.button_clicked = False
@@ -57,38 +91,37 @@ def main():
                         st.session_state.button_clicked = True
                         button_placeholder.empty()
 
-                        # Load model
-                        model = load_model()
-
-                        # Encode sentences and compute similarity matrices
-                        df['embedding'] = encode_sentences(model, df['السؤال'].tolist())
-                        embeddings = np.array(df['embedding'].tolist())
+                        # Encode sentences from the cleaned column and compute similarity matrices
+                        df_copy['embedding'] = encode_sentences(model, df_copy['cleaned_question'].tolist())
+                        embeddings = np.array(df_copy['embedding'].tolist())
                         similarity_matrix = cosine_similarity(embeddings)
                         distance_matrix = 1 - similarity_matrix
                         distance_matrix = np.clip(distance_matrix, a_min=0, a_max=None)
 
                         # Perform clustering
-                        threshold = 0.9
+                        threshold = 0.85
                         eps = 1 - threshold
-                        dbscan = DBSCAN(eps=eps, min_samples=8, metric='precomputed')
+                        dbscan = DBSCAN(eps=eps, min_samples=6, metric='precomputed')
                         clusters = dbscan.fit_predict(distance_matrix)
 
-                        # Add clusters to the DataFrame
-                        df['category'] = clusters
+                        # Add clusters to the copy DataFrame
+                        df_copy['category'] = clusters
 
                         # Handle noise points (outliers)
-                        max_category = df['category'][df['category'] != -1].max() if len(
-                            df[df['category'] != -1]) > 0 else 0
-                        df['category'] = df['category'].apply(lambda x: max_category + 1 if x == -1 else x + 1)
+                        max_category = df_copy['category'][df_copy['category'] != -1].max() if len(
+                            df_copy[df_copy['category'] != -1]) > 0 else 0
+                        df_copy['category'] = df_copy['category'].apply(
+                            lambda x: max_category + 1 if x == -1 else x + 1)
 
-                        # Drop the embedding column for clarity
-                        df.drop('embedding', axis=1, inplace=True)
+                        # Merge results back to the original DataFrame
+                        df['category'] = df_copy['category']
                         df_sorted = df.sort_values(by='category')
 
                         st.dataframe(df_sorted)
+                        csv_data = df_sorted.to_csv(index=False, encoding=encoding)
                         st.download_button(
-                            label="Download Results",
-                            data=df_sorted.to_csv(index=False).encode('utf-8'),
+                            label="Download",
+                            data=csv_data.encode(encoding),
                             file_name="results.csv",
                             mime="text/csv",
                         )
